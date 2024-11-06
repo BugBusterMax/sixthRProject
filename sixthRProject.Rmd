@@ -1,0 +1,72 @@
+---
+title: "sixthRProject"
+author: "Zirui"
+date: "2024-11-06"
+output: html_document
+---
+## Assignment 7
+```{r}
+library(tidyverse)
+```
+## 1
+## 1.1
+## (Q1)
+```{r}
+library(palmerpenguins)
+bill_adelie <- penguins %>%
+  filter(species == "Adelie") %>%
+  drop_na(bill_length_mm) %>%
+  pull(bill_length_mm)
+mu0 <- 40
+t_test_result <- t.test(bill_adelie, mu = mu0)
+t_test_result
+```
+## 1.2
+## (Q1)
+```{r}
+t_test_custom <- function(x, mu0) {
+  n <- length(x)
+  x_bar <- mean(x)
+  s <- sd(x)
+  t_statistic <- (x_bar - mu0) / (s / sqrt(n))
+  df <- n - 1
+  p_value <- 2 * pt(-abs(t_statistic), df)
+  return(p_value)
+}
+custom_p_value <- t_test_custom(bill_adelie, mu0)
+print(custom_p_value)
+built_in_test <- t.test(bill_adelie, mu = mu0)
+print(built_in_test$p.value)
+```
+## 2
+```{r}
+library(PairedData) # you might need to install the package first 
+data("Barley")
+detach('package:PairedData', unload=TRUE) 
+detach('package:MASS', unload=TRUE) 
+# unload package because it contains another select() function
+head(Barley, 4)
+```
+## (Q1)
+```{r}
+library(PairedData)
+data("Barley")
+head(Barley)
+t_test_result <- t.test(Barley$Glabron, Barley$Velvet, paired = TRUE)
+print(t_test_result)
+```
+## (Q2)
+```{r}
+differences <- Barley$Glabron - Barley$Velvet
+mean_difference <- mean(differences)
+sd_difference <- sd(differences)
+cohen_d <- mean_difference / sd_difference
+print(cohen_d)
+```
+## (Q3)
+```{r}
+differences <- Barley$Glabron - Barley$Velvet
+qqnorm(differences)
+qqline(differences, col = "red")
+shapiro.test(differences)
+```
