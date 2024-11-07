@@ -70,3 +70,356 @@ qqnorm(differences)
 qqline(differences, col = "red")
 shapiro.test(differences)
 ```
+## 3
+```{r}
+library(palmerpenguins)
+peng_AC<-penguins %>% drop_na(species,body_mass_g) %>% filter(species !="Gentoo")
+head(peng_AC %>% dplyr::select(species, flipper_length_mm, body_mass_g), 5)
+```
+## (Q1)
+```{r}
+val_col <- "body_mass_g"
+group_col <- "species"
+data <- peng_AC
+data_new <- data %>%
+ rename(group=(!!group_col),val=(!!val_col))%>%
+ group_by(group) %>%
+ drop_na(val) %>%
+ summarise(mn=mean(val))
+data_new
+data_new$mn[2]
+t_test_function <- function(data, val_col, group_col) {
+  data <- data %>%
+    rename(group = !!sym(group_col), val = !!sym(val_col)) %>%
+    drop_na(val) %>%
+    group_by(group)
+  group_stats <- data %>%
+    summarise(
+      mean = mean(val),
+      variance = var(val),
+      n = n()
+    )
+  mean1 <- group_stats$mean[1]
+  mean2 <- group_stats$mean[2]
+  var1 <- group_stats$variance[1]
+  var2 <- group_stats$variance[2]
+  n1 <- group_stats$n[1]
+  n2 <- group_stats$n[2]
+  pooled_variance <- ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+  pooled_se <- sqrt(pooled_variance * (1 / n1 + 1 / n2))
+  t_stat <- (mean1 - mean2) / pooled_se
+  df <- n1 + n2 - 2
+  p_val <- 2 * pt(-abs(t_stat), df)
+  pooled_sd <- sqrt(pooled_variance)
+  effect_size <- (mean1 - mean2) / pooled_sd
+  result <- data.frame(
+    t_stat = t_stat,
+    effect_size = effect_size,
+    p_val = p_val
+  )
+  
+  return(result)
+}
+t_test_function(data = peng_AC, val_col = "body_mass_g", group_col = "species")
+```
+## (Q2)
+```{r}
+t_test_function <- function(data, val_col, group_col, var_equal = TRUE) {
+  # 动态重命名列
+  data <- data %>%
+    rename(group = !!sym(group_col), val = !!sym(val_col)) %>%
+    drop_na(val) %>%
+    group_by(group)
+  
+  # 计算每组的均值、方差和样本量
+  group_stats <- data %>%
+    summarise(
+      mean = mean(val),
+      variance = var(val),
+      n = n()
+    )
+  
+  # 获取每组的统计量
+  mean1 <- group_stats$mean[1]
+  mean2 <- group_stats$mean[2]
+  var1 <- group_stats$variance[1]
+  var2 <- group_stats$variance[2]
+  n1 <- group_stats$n[1]
+  n2 <- group_stats$n[2]
+  
+  # 根据var_equal选择检验类型
+  if (var_equal) {
+    # 计算合并方差
+    pooled_variance <- ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+    pooled_se <- sqrt(pooled_variance * (1 / n1 + 1 / n2))
+    
+    # 计算t统计量
+    t_stat <- (mean1 - mean2) / pooled_se
+    
+    # 自由度
+    df <- n1 + n2 - 2
+  } else {
+    # 使用不等方差的Welch’s t检验
+    se <- sqrt(var1 / n1 + var2 / n2)
+    t_stat <- (mean1 - mean2) / se
+    
+    # 使用Welch’s自由度公式
+    df <- (var1 / n1 + var2 / n2)^2 / ((var1 / n1)^2 / (n1 - 1) + (var2 / n2)^2 / (n2 - 1))
+  }
+  
+  # 计算p值
+  p_val <- 2 * pt(-abs(t_stat), df)
+  
+  # 计算效应大小（Cohen's d），仅在var_equal = TRUE时计算合并方差效应大小
+  if (var_equal) {
+    pooled_sd <- sqrt(pooled_variance)
+  } else {
+    pooled_sd <- sqrt((var1 + var2) / 2)  # 使用平均方差的近似效应大小
+  }
+  effect_size <- (mean1 - mean2) / pooled_sd
+  
+  # 返回结果数据框
+  result <- data.frame(
+    t_stat = t_stat,
+    effect_size = effect_size,
+    p_val = p_val
+  )
+  
+  return(result)
+}
+
+# 用 peng_AC 数据测试函数，使用 Welch’s t 检验
+t_test_function(data = peng_AC, val_col = "body_mass_g", group_col = "species", var_equal = FALSE)
+```
+## 4
+## (Q1)
+## (Q2)
+## 5
+```{r}
+num_trials<-10000
+sample_size<-30
+mu_0<-1
+mu_1<-1
+sigma_0<-3
+sigma_1<-3
+alpha<-0.05
+set.seed(0)
+single_alpha_test_size_simulation_df <- data.frame(trial=seq(num_trials
+)) %>%
+ mutate(sample_0=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_0,sd=sigma_0)),
+ sample_1=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_1,sd=sigma_1))) %>%
+ mutate(p_value=pmap(.l=list(trial,sample_0,sample_1), .f=~t.test(..2,..3,var.equal = TRUE)$p.value))%>%
+ mutate(type_1_error=p_value<alpha)
+single_alpha_test_size_simulation_df %>%
+ pull(type_1_error) %>%
+ mean()
+```
+## (Q1)
+```{r}
+library(tidyverse)
+library(purrr)
+num_trials <- 10000
+sample_size <- 30
+mu_0 <- 1
+mu_1 <- 1
+sigma_0 <- 3
+sigma_1 <- 3
+alpha_values <- seq(0.01, 0.10, by = 0.01)
+set.seed(0)
+test_size_results <- map_dfr(alpha_values, function(alpha) {
+  sim_df <- data.frame(trial = seq(num_trials)) %>%
+    mutate(
+      sample_0 = map(.x = trial, .f = ~rnorm(n = sample_size, mean = mu_0, sd = sigma_0)),
+      sample_1 = map(.x = trial, .f = ~rnorm(n = sample_size, mean = mu_1, sd = sigma_1)),
+      p_value = pmap_dbl(.l = list(sample_0, sample_1), .f = ~t.test(..1, ..2, var.equal = TRUE)$p.value),
+      type_1_error = p_value < alpha
+    )
+  observed_test_size <- mean(sim_df$type_1_error)
+  tibble(alpha = alpha, observed_test_size = observed_test_size)
+})
+
+ggplot(test_size_results, aes(x = alpha, y = observed_test_size)) +
+  geom_line(color = "blue", linewidth = 1) +   # 使用 linewidth 替代 size
+  geom_point(color = "red", size = 2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
+  labs(
+    title = "观察检验规模与显著性水平(α)的关系",
+    x = "显著性水平(α)",
+    y = "观察检验规模"
+  ) +
+  theme_minimal()
+```
+## 6
+```{r}
+num_trials<-10000
+n_0<-30
+n_1<-30
+mu_0<-3
+mu_1<-4
+sigma_0<-2
+sigma_1<-2
+alpha<-0.05
+set.seed(0)
+data.frame(trial=seq(num_trials)) %>% mutate(
+  sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)),
+  sample_1 = map(.x=trial,.f =~ rnorm(n=n_1,mean=mu_1,sd=sigma_1))) %>%
+  mutate(p_value=pmap(.l = list(trial,sample_0,sample_1),
+                      .f =~ t.test(..2, ..3, var.equal = TRUE)$p.value)) %>%
+  mutate(reject_null = p_value<alpha ) %>%
+  pull(reject_null) %>%
+  mean() 
+```
+## (Q1)
+```{r}
+library(tidyverse)
+library(purrr)
+num_trials <- 10000
+n_0 <- 30
+n_1 <- 30
+mu_0 <- 3
+mu_1 <- 4
+sigma_0 <- 2
+sigma_1 <- 2
+alpha_levels <- seq(0.01, 0.1, by = 0.01)
+set.seed(0)
+compute_power <- function(alpha) {
+  data.frame(trial = seq(num_trials)) %>%
+    mutate(
+      sample_0 = map(trial, ~ rnorm(n = n_0, mean = mu_0, sd = sigma_0)),
+      sample_1 = map(trial, ~ rnorm(n = n_1, mean = mu_1, sd = sigma_1))
+    ) %>%
+    mutate(
+      p_value = pmap_dbl(
+        list(sample_0, sample_1),
+        ~ t.test(..1, ..2, var.equal = TRUE)$p.value
+      ),
+      reject_null = p_value < alpha
+    ) %>%
+    summarize(power = mean(reject_null)) %>%
+    pull(power)
+}
+power_results <- tibble(alpha = alpha_levels) %>%
+  mutate(power = map_dbl(alpha, compute_power))
+ggplot(power_results, aes(x = alpha, y = power)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "显著性水平与功效的关系",
+       x = "显著性水平 (alpha)",
+       y = "功效") +
+  theme_minimal()
+```
+## (Q2)
+```{r}
+library(tidyverse)
+library(purrr)
+num_trials <- 10000
+n_0 <- 30
+n_1 <- 30
+mu_0 <- 3
+sigma_0 <- 2
+sigma_1 <- 2
+alpha <- 0.05
+mean_diffs <- seq(0, 3, by = 0.25)
+set.seed(0)
+compute_power_diff <- function(mean_diff) {
+  data.frame(trial = seq(num_trials)) %>%
+    mutate(
+      sample_0 = map(trial, ~ rnorm(n = n_0, mean = mu_0, sd = sigma_0)),
+      sample_1 = map(trial, ~ rnorm(n = n_1, mean = mu_0 + mean_diff, sd = sigma_1))
+    ) %>%
+    mutate(
+      p_value = pmap_dbl(
+        list(sample_0, sample_1),
+        ~ t.test(..1, ..2, var.equal = TRUE)$p.value
+      ),
+      reject_null = p_value < alpha
+    ) %>%
+    summarize(power = mean(reject_null)) %>%
+    pull(power)
+}
+power_results_diff <- tibble(mean_diff = mean_diffs) %>%
+  mutate(power = map_dbl(mean_diff, compute_power_diff))
+ggplot(power_results_diff, aes(x = mean_diff, y = power)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "功效与均值差异的关系",
+       x = "均值差异 (mu1 - mu0)",
+       y = "功效") +
+  theme_minimal()
+```
+## (Q3)
+```{r}
+library(tidyverse)
+library(purrr)
+num_trials <- 10000
+n_0 <- 30
+n_1 <- 30
+mu_0 <- 3
+mu_1 <- 4
+alpha <- 0.05
+std_devs <- seq(0.5, 3, by = 0.25)
+set.seed(0)
+compute_power_sd <- function(sigma) {
+  data.frame(trial = seq(num_trials)) %>%
+    mutate(
+      sample_0 = map(trial, ~ rnorm(n = n_0, mean = mu_0, sd = sigma)),
+      sample_1 = map(trial, ~ rnorm(n = n_1, mean = mu_1, sd = sigma))
+    ) %>%
+    mutate(
+      p_value = pmap_dbl(
+        list(sample_0, sample_1),
+        ~ t.test(..1, ..2, var.equal = TRUE)$p.value
+      ),
+      reject_null = p_value < alpha
+    ) %>%
+    summarize(power = mean(reject_null)) %>%
+    pull(power)
+}
+power_results_sd <- tibble(std_dev = std_devs) %>%
+  mutate(power = map_dbl(std_dev, compute_power_sd))
+ggplot(power_results_sd, aes(x = std_dev, y = power)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "统计功效与标准差的关系",
+       x = "总体标准差 (σ)",
+       y = "功效") +
+  theme_minimal()
+```
+## (Q4)
+```{r}
+library(tidyverse)
+library(purrr)
+num_trials <- 10000
+mu_0 <- 3
+mu_1 <- 4
+sigma_0 <- 2
+sigma_1 <- 2
+alpha <- 0.05
+sample_sizes <- seq(10, 100, by = 10)
+set.seed(0)
+compute_power_n <- function(n) {
+  data.frame(trial = seq(num_trials)) %>%
+    mutate(
+      sample_0 = map(trial, ~ rnorm(n = n, mean = mu_0, sd = sigma_0)),
+      sample_1 = map(trial, ~ rnorm(n = n, mean = mu_1, sd = sigma_1))
+    ) %>%
+    mutate(
+      p_value = pmap_dbl(
+        list(sample_0, sample_1),
+        ~ t.test(..1, ..2, var.equal = TRUE)$p.value
+      ),
+      reject_null = p_value < alpha
+    ) %>%
+    summarize(power = mean(reject_null)) %>%
+    pull(power)
+}
+power_results_n <- tibble(sample_size = sample_sizes) %>%
+  mutate(power = map_dbl(sample_size, compute_power_n))
+ggplot(power_results_n, aes(x = sample_size, y = power)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "统计功效 vs 样本大小",
+       x = "样本大小 (n)",
+       y = "功效") +
+  theme_minimal()
+```
