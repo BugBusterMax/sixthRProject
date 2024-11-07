@@ -423,3 +423,72 @@ ggplot(power_results_n, aes(x = sample_size, y = power)) +
        y = "功效") +
   theme_minimal()
 ```
+## 7
+```{r}
+library(tidyverse)
+num_trials <- 1000
+n <- 30
+mu_X <- 5
+sigma_X <- 1
+mu_Z <- 1
+sigma_Z <- 0.5
+alpha <- 0.05
+set.seed(0)
+results <- data.frame(trial = 1:num_trials) %>%
+  mutate(
+    X = map(trial, ~ rnorm(n, mean = mu_X, sd = sigma_X)),
+    Z = map(trial, ~ rnorm(n, mean = mu_Z, sd = sigma_Z)),
+    Y = map2(X, Z, ~ .x + .y),
+    paired_p_value = map2_dbl(X, Y, ~ t.test(.x, .y, paired = TRUE)$p.value),
+    unpaired_p_value = map2_dbl(X, Y, ~ t.test(.x, .y, paired = FALSE, var.equal = TRUE)$p.value),
+    paired_reject = paired_p_value < alpha,
+    unpaired_reject = unpaired_p_value < alpha
+  )
+power_results <- results %>%
+  summarize(
+    paired_power = mean(paired_reject),
+    unpaired_power = mean(unpaired_reject)
+  )
+power_results
+```
+## (Q1)
+```{r}
+library(tidyverse)
+num_trials <- 1000
+n <- 30
+mu_X <- 10
+sigma_X <- 5
+mu_Z <- 1
+sigma_Z <- 1
+alpha_values <- seq(0.01, 0.1, by = 0.01)
+set.seed(0)
+power_results <- data.frame()
+for (alpha in alpha_values) {
+  sim_results <- data.frame(trial = 1:num_trials) %>%
+    mutate(
+      X = map(trial, ~ rnorm(n, mean = mu_X, sd = sigma_X)),
+      Z = map(trial, ~ rnorm(n, mean = mu_Z, sd = sigma_Z)),
+      Y = map2(X, Z, ~ .x + .y),
+      paired_p_value = map2_dbl(X, Y, ~ t.test(.x, .y, paired = TRUE)$p.value),
+      unpaired_p_value = map2_dbl(X, Y, ~ t.test(.x, .y, paired = FALSE, var.equal = TRUE)$p.value),
+      paired_reject = paired_p_value < alpha,
+      unpaired_reject = unpaired_p_value < alpha
+    )
+  power_at_alpha <- sim_results %>%
+    summarize(
+      alpha = alpha,
+      paired_power = mean(paired_reject),
+      unpaired_power = mean(unpaired_reject)
+    )
+  power_results <- bind_rows(power_results, power_at_alpha)
+}
+power_results %>%
+  pivot_longer(cols = c("paired_power", "unpaired_power"), names_to = "test_type", values_to = "power") %>%
+  ggplot(aes(x = alpha, y = power, color = test_type)) +
+  geom_line(size = 1) +
+  labs(title = "配对与非配对 t 检验的功效与显著性水平的关系",
+       x = "显著性水平 (alpha)",
+       y = "统计功效",
+       color = "检验类型") +
+  theme_minimal()
+```
